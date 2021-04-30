@@ -1,13 +1,13 @@
 import { describe, it } from 'mocha'
 import snapshot from 'snap-shot-it'
-import { integer } from '../../lib'
-import type { Options } from '../../lib/parser/integer'
+import { long } from '../../lib'
+import type { Options } from '../../lib/parser/long'
 import { showWhitespaceGlyph, testParser } from '../utils'
 
-describe('integer()', () => {
+describe('long()', () => {
 	const pattern = /^[+-]?(?:0|[1-9][0-9]*)$/
 
-	describe('integer()', () => {
+	describe('long()', () => {
 		const options: Options[] = [
 			{ pattern },
 		]
@@ -22,10 +22,10 @@ describe('integer()', () => {
 			{ content: '0123' },
 		]
 		for (const option of options) {
-			describe('integer()', () => {
+			describe('long()', () => {
 				for (const { content } of cases) {
 					it(`Parse "${showWhitespaceGlyph(content)}"`, () => {
-						const parser = integer(option as any)
+						const parser = long(option as any)
 						snapshot(testParser(parser, content))
 					})
 				}
@@ -33,20 +33,20 @@ describe('integer()', () => {
 		}
 	})
 
-	describe('integer(failsOnEmpty)', () => {
-		describe('integer(failsOnEmpty=true)', () => {
+	describe('long(failsOnEmpty)', () => {
+		describe('long(failsOnEmpty=true)', () => {
 			it('Parse ""', () => {
-				const parser = integer({ pattern, failsOnEmpty: true })
+				const parser = long({ pattern, failsOnEmpty: true })
 				snapshot(testParser(parser, ''))
 			})
 		})
 	})
 
-	describe('integer(min, max, onOutOfRange)', () => {
+	describe('long(min, max, onOutOfRange)', () => {
 		const options: Options[] = [
-			{ pattern, min: 1 },
-			{ pattern, max: 6 },
-			{ pattern, min: 1, max: 6, onOutOfRange: (ans, _src, ctx) => ctx.err.report('Test message!', ans) },
+			{ pattern, min: 1n },
+			{ pattern, max: 6n },
+			{ pattern, min: 1n, max: 6n, onOutOfRange: (ans, _src, ctx) => ctx.err.report('Test message!', ans) },
 		]
 		const cases: { content: string }[] = [
 			{ content: '0' },
@@ -54,10 +54,10 @@ describe('integer()', () => {
 			{ content: '9' },
 		]
 		for (const option of options) {
-			describe(`integer(${option.min}, ${option.max}, ${!!option.onOutOfRange})`, () => {
+			describe(`long(${option.min}, ${option.max}, ${!!option.onOutOfRange})`, () => {
 				for (const { content } of cases) {
 					it(`Parse "${showWhitespaceGlyph(content)}"`, () => {
-						const parser = integer(option as any)
+						const parser = long(option as any)
 						snapshot(testParser(parser, content))
 					})
 				}

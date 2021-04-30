@@ -1,5 +1,5 @@
 import { localize } from '@spyglassmc/locales'
-import type { IntegerNode, Mutable } from '../node'
+import type { LongNode, Mutable } from '../node'
 import type { ParserContext } from '../service'
 import { ErrorSeverity, Range, Source } from '../source'
 import type { InfallibleParser, Parser, Result } from './Parser'
@@ -10,17 +10,17 @@ interface OptionsBase {
 	/**
 	 * Inclusive.
 	 */
-	min?: number,
+	min?: bigint,
 	/**
 	 * Inclusive.
 	 */
-	max?: number,
+	max?: bigint,
 	/**
 	 * A callback function that will be called when the numeral value is out of range.
 	 * 
 	 * Defaults to a function that marks an `Error` at the range of the node.
 	 */
-	onOutOfRange?: (ans: IntegerNode, src: Source, ctx: ParserContext, options: Options) => void,
+	onOutOfRange?: (ans: LongNode, src: Source, ctx: ParserContext, options: Options) => void,
 }
 
 interface FallibleOptions extends OptionsBase {
@@ -34,22 +34,22 @@ interface InfallibleOptions extends OptionsBase {
 /** @internal For test only */
 export type Options = FallibleOptions | InfallibleOptions
 
-const fallbackOnOutOfRange = (ans: IntegerNode, _src: Source, ctx: ParserContext, options: Options) => {
+const fallbackOnOutOfRange = (ans: LongNode, _src: Source, ctx: ParserContext, options: Options) => {
 	ctx.err.report(
-		localize('expected', localize('integer.between', options.min ?? '-∞', options.max ?? '+∞')),
+		localize('expected', localize('long.between', options.min ?? '-∞', options.max ?? '+∞')),
 		ans,
 		ErrorSeverity.Error
 	)
 }
 
-export function integer(options: InfallibleOptions): InfallibleParser<IntegerNode>
-export function integer(options: FallibleOptions): Parser<IntegerNode>
-export function integer(options: Options): Parser<IntegerNode> {
-	return (src: Source, ctx: ParserContext): Result<IntegerNode> => {
-		const ans: Mutable<IntegerNode> = {
-			type: 'integer',
+export function long(options: InfallibleOptions): InfallibleParser<LongNode>
+export function long(options: FallibleOptions): Parser<LongNode>
+export function long(options: Options): Parser<LongNode> {
+	return (src: Source, ctx: ParserContext): Result<LongNode> => {
+		const ans: Mutable<LongNode> = {
+			type: 'long',
 			range: Range.create(src),
-			value: 0,
+			value: 0n,
 		}
 
 		if (src.peek() === '-' || src.peek() === '+') {
@@ -65,7 +65,7 @@ export function integer(options: Options): Parser<IntegerNode> {
 
 		let errorOccurred = false
 		try {
-			ans.value = Number(raw)
+			ans.value = BigInt(raw)
 		} catch (_) {
 			// `raw` might be "+" or "-" here.
 			errorOccurred = true
@@ -75,9 +75,9 @@ export function integer(options: Options): Parser<IntegerNode> {
 			if (options.failsOnEmpty) {
 				return Failure
 			}
-			ctx.err.report(localize('expected', localize('integer')), ans)
+			ctx.err.report(localize('expected', localize('long')), ans)
 		} else if (!options.pattern.test(raw) || errorOccurred) {
-			ctx.err.report(localize('parser.integer.illegal', options.pattern), ans)
+			ctx.err.report(localize('parser.long.illegal', options.pattern), ans)
 		} else if ((options.min && ans.value < options.min) || (options.max && ans.value > options.max)) {
 			const onOutOfRange = options.onOutOfRange ?? fallbackOnOutOfRange
 			onOutOfRange(ans, src, ctx, options)

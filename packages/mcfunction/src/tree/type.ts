@@ -7,7 +7,7 @@ interface BaseTreeNode {
 		[name: string]: TreeNode,
 	},
 	executable?: boolean,
-	redirect?: [string],
+	redirect?: string[],
 
 	// The following properties are custom.
 	/**
