@@ -88,7 +88,7 @@ export interface MinecraftDimensionArgumentTreeNode extends BaseArgumentTreeNode
 export interface MinecraftEntityArgumentTreeNode extends BaseArgumentTreeNode {
 	parser: 'minecraft:entity',
 	properties: {
-		amount: 'single' | 'multiple',
+		amount: 'multiple' | 'single',
 		type: 'entities' | 'players',
 	},
 }

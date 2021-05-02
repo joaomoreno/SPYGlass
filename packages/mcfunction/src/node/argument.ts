@@ -1,5 +1,22 @@
 import type * as core from '@spyglassmc/core'
+import type * as nbt from '@spyglassmc/nbt'
 import type { CommandChildBaseNode, CommandChildNodeExtender } from './command'
+
+export interface BlockStatesNode extends core.TableNode<core.StringNode, core.StringNode> {
+	type: 'mcfunction:block/states'
+}
+export namespace BlockStatesNode {
+	/* istanbul ignore next */
+	export function is(node: core.AstNode): node is BlockStatesNode {
+		return (node as BlockStatesNode).type === 'mcfunction:block/states'
+	}
+}
+export interface BlockBaseNode extends CommandChildBaseNode {
+	children: (core.ResourceLocationNode | BlockStatesNode | nbt.NbtCompoundNode)[],
+	id: core.ResourceLocationNode,
+	states?: BlockStatesNode,
+	nbt?: nbt.NbtCompoundNode,
+}
 
 export const CoordinateNotations = ['', '~', '^'] as const
 export type CoordinateNodeNotation = typeof CoordinateNotations[number]
@@ -35,14 +52,27 @@ export interface EntitySelectorAdvancementsArgumentCriteriaNode extends core.Tab
 export interface EntitySelectorAdvancementsArgumentNode extends core.TableNode<core.ResourceLocationNode, core.BooleanNode | EntitySelectorAdvancementsArgumentCriteriaNode> {
 	type: 'mcfunction:entity_selector/arguments/advancements'
 }
-export interface EntitySelectorScoresArgumentNode extends core.TableNode<MinecraftObjectiveArgumentNode, MinecraftIntRangeArgumentNode> {
+export interface EntitySelectorScoresArgumentNode extends core.TableNode<core.SymbolNode, MinecraftIntRangeArgumentNode> {
 	type: 'mcfunction:entity_selector/arguments/scores'
+}
+export interface EntitySelectorInvertableArgumentValueNode<T extends core.AstNode> extends core.SequenceNode<core.LiteralNode | T> {
+	type: 'mcfunction:entity_selector/arguments/value/invertable',
+	value: T,
+	inverted: boolean,
 }
 export interface EntitySelectorArgumentsNode extends core.TableNode<core.StringNode, any> {
 	type: 'mcfunction:entity_selector/arguments'
 }
+export namespace EntitySelectorArgumentsNode {
+	/* istanbul ignore next */
+	export function is(node: core.AstNode): node is EntitySelectorArgumentsNode {
+		return (node as EntitySelectorArgumentsNode).type === 'mcfunction:entity_selector/arguments'
+	}
+}
 export const EntitySelectorVariables = ['p', 'a', 'r', 's', 'e']
 export type EntitySelectorVariable = typeof EntitySelectorVariables[number]
+export const EntitySelectorAtVariables = ['@p', '@a', '@r', '@s', '@e']
+export type EntitySelectorAtVariable = typeof EntitySelectorAtVariables[number]
 export namespace EntitySelectorVariable {
 	/* istanbul ignore next */
 	export function is(value: string): value is EntitySelectorVariable {
@@ -56,13 +86,28 @@ export interface EntitySelectorNode extends core.SequenceNode<core.LiteralNode |
 	currentEntity?: boolean,
 	dimensionLimited?: boolean,
 	playersOnly?: boolean,
+	predicates?: string[],
+	chunkLimited?: boolean,
+	single?: boolean,
 	typeLimited?: boolean,
-	sectionLimited?: boolean,
 }
-export interface EntityBaseNode extends core.SequenceNode<core.StringNode | EntitySelectorNode | MinecraftUuidArgumentNode> {
-	player?: core.StringNode,
+export namespace EntitySelectorNode {
+	/* istanbul ignore next */
+	export function is(node: core.AstNode): node is EntitySelectorNode {
+		return (node as EntitySelectorNode).type === 'mcfunction:entity_selector'
+	}
+}
+export interface EntityBaseNode extends CommandChildBaseNode {
+	children: (core.StringNode | EntitySelectorNode | MinecraftUuidArgumentNode)[],
+	playerName?: core.StringNode,
 	selector?: EntitySelectorNode,
 	uuid?: MinecraftUuidArgumentNode,
+}
+
+export interface ItemBaseNode extends CommandChildBaseNode {
+	children: (core.ResourceLocationNode | nbt.NbtCompoundNode)[],
+	id: core.ResourceLocationNode,
+	nbt?: nbt.NbtCompoundNode,
 }
 
 export interface VectorNodeExtender {
@@ -95,10 +140,10 @@ export interface MinecraftAngleArgumentNode extends CommandChildBaseNode, Coordi
 export interface MinecraftBlockPosArgumentNode extends VectorBaseNode, CommandChildNodeExtender {
 	type: 'mcfunction:argument/minecraft:block_pos',
 }
-export interface MinecraftBlockPredicateArgumentNode extends CommandChildBaseNode {
+export interface MinecraftBlockPredicateArgumentNode extends BlockBaseNode {
 	type: 'mcfunction:argument/minecraft:block_predicate',
 }
-export interface MinecraftBlockStateArgumentNode extends CommandChildBaseNode {
+export interface MinecraftBlockStateArgumentNode extends BlockBaseNode {
 	type: 'mcfunction:argument/minecraft:block_state',
 }
 export interface MinecraftColorArgumentNode extends CommandChildBaseNode, core.LiteralBaseNode {
@@ -113,7 +158,7 @@ export interface MinecraftComponentArgumentNode extends CommandChildBaseNode {
 export interface MinecraftDimensionArgumentNode extends CommandChildBaseNode, core.ResourceLocationBaseNode {
 	type: 'mcfunction:argument/minecraft:dimension',
 }
-export interface MinecraftEntityArgumentNode extends CommandChildBaseNode {
+export interface MinecraftEntityArgumentNode extends EntityBaseNode {
 	type: 'mcfunction:argument/minecraft:entity',
 }
 export interface MinecraftEntityAnchorArgumentNode extends CommandChildBaseNode, core.LiteralBaseNode {
@@ -122,34 +167,37 @@ export interface MinecraftEntityAnchorArgumentNode extends CommandChildBaseNode,
 export interface MinecraftEntitySummonArgumentNode extends CommandChildBaseNode, core.ResourceLocationBaseNode {
 	type: 'mcfunction:argument/minecraft:entity_summon',
 }
-export interface MinecraftFloatRangeArgumentNode extends core.SequenceNode<core.FloatNode | core.LiteralNode>, CommandChildNodeExtender {
+export interface MinecraftFloatRangeArgumentNode extends CommandChildBaseNode {
 	type: 'mcfunction:argument/minecraft:float_range',
+	children: (core.FloatNode | core.LiteralNode)[],
 	value: [number | null, number | null],
 }
 export interface MinecraftFunctionArgumentNode extends CommandChildBaseNode, core.ResourceLocationBaseNode {
 	type: 'mcfunction:argument/minecraft:function',
 }
-export interface MinecraftGameProfileArgumentNode extends CommandChildBaseNode {
+export interface MinecraftGameProfileArgumentNode extends EntityBaseNode {
 	type: 'mcfunction:argument/minecraft:game_profile',
 }
-export interface MinecraftIntRangeArgumentNode extends core.SequenceNode<core.IntegerNode | core.LiteralNode>, CommandChildNodeExtender {
+export interface MinecraftIntRangeArgumentNode extends CommandChildBaseNode {
 	type: 'mcfunction:argument/minecraft:int_range',
+	children: (core.IntegerNode | core.LiteralNode)[],
 	value: [number | null, number | null],
 }
 export interface MinecraftItemEnchantmentArgumentNode extends CommandChildBaseNode, core.ResourceLocationBaseNode {
 	type: 'mcfunction:argument/minecraft:item_enchantment',
 }
-export interface MinecraftItemPredicateArgumentNode extends CommandChildBaseNode {
+export interface MinecraftItemPredicateArgumentNode extends ItemBaseNode {
 	type: 'mcfunction:argument/minecraft:item_predicate',
 }
 export interface MinecraftItemSlotArgumentNode extends CommandChildBaseNode {
 	type: 'mcfunction:argument/minecraft:item_slot',
 }
-export interface MinecraftItemStackArgumentNode extends CommandChildBaseNode {
+export interface MinecraftItemStackArgumentNode extends ItemBaseNode {
 	type: 'mcfunction:argument/minecraft:item_stack',
 }
 export interface MinecraftMessageArgumentNode extends CommandChildBaseNode {
 	type: 'mcfunction:argument/minecraft:message',
+	children: (core.StringNode | EntitySelectorNode)[],
 }
 export interface MinecraftMobEffectArgumentNode extends CommandChildBaseNode, core.ResourceLocationBaseNode {
 	type: 'mcfunction:argument/minecraft:mob_effect',
@@ -183,6 +231,9 @@ export interface MinecraftRotationArgumentNode extends VectorBaseNode, CommandCh
 }
 export interface MinecraftScoreHolderArgumentNode extends CommandChildBaseNode {
 	type: 'mcfunction:argument/minecraft:score_holder',
+	children: (core.SymbolNode | EntitySelectorNode)[],
+	fakeName?: core.SymbolNode,
+	selector?: EntitySelectorNode,
 }
 export interface MinecraftScoreboardSlotArgumentNode extends CommandChildBaseNode, core.LiteralBaseNode {
 	type: 'mcfunction:argument/minecraft:scoreboard_slot',
@@ -193,8 +244,9 @@ export interface MinecraftSwizzleArgumentNode extends CommandChildBaseNode, core
 export interface MinecraftTeamArgumentNode extends CommandChildBaseNode, core.SymbolBaseNode {
 	type: 'mcfunction:argument/minecraft:team',
 }
-export interface MinecraftTimeArgumentNode extends core.SequenceNode<core.FloatNode | core.LiteralNode>, CommandChildNodeExtender {
+export interface MinecraftTimeArgumentNode extends CommandChildBaseNode {
 	type: 'mcfunction:argument/minecraft:time',
+	children: (core.FloatNode | core.LiteralNode)[],
 	value: number,
 	unit?: string,
 }

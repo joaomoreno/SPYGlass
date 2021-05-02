@@ -1,5 +1,5 @@
-import type { MetaRegistry } from '../../service'
 import type { BooleanNode, CommentNode, ErrorNode, FloatNode, IntegerNode, LiteralBaseNode, LiteralNode, LongNode, ResourceLocationBaseNode, ResourceLocationNode, StringBaseNode, StringNode, SymbolBaseNode, SymbolNode } from '../../node'
+import type { MetaRegistry } from '../../service'
 import { IndexMap, Range } from '../../source'
 import { traversePreOrder } from '../util'
 import type { Colorizer, ColorTokenType } from './Colorizer'
@@ -61,7 +61,7 @@ export const string: Colorizer<StringBaseNode> = (node, ctx) => {
 		const colorizer = ctx.meta.getColorizer(node.valueNode.type)
 		const result = colorizer(node.valueNode, ctx)
 		// TODO: Fill the gap between the last token and the ending quote with errors.
-		return ColorToken.fillGap(toOuterColorTokens(result, node.valueMap), node.range, 'string')
+		return ColorToken.fillGap(toOuterColorTokens(result, node.valueMap), node.range, node.options.colorTokenType ?? 'string')
 	} else {
 		return [ColorToken.create(node, 'string')]
 	}

@@ -1,7 +1,9 @@
 import * as core from '@spyglassmc/core'
+import * as json from '@spyglassmc/json'
 import { localeQuote, localize } from '@spyglassmc/locales'
-import type { ArgumentNode, CoordinateNode, EntitySelectorArgumentsNode, EntitySelectorNode, MinecraftEntityArgumentNode, MinecraftFloatRangeArgumentNode, MinecraftIntRangeArgumentNode, MinecraftUuidArgumentNode, SpyglassmcUnknownArgumentNode, VectorBaseNode } from '../node'
-import { CoordinateSystem, EntitySelectorVariables, MinecraftTimeArgumentNode } from '../node'
+import * as nbt from '@spyglassmc/nbt'
+import type { ArgumentNode, CoordinateNode, EntitySelectorAdvancementsArgumentCriteriaNode, EntitySelectorAdvancementsArgumentNode, EntitySelectorInvertableArgumentValueNode, EntitySelectorScoresArgumentNode, MinecraftBlockPredicateArgumentNode, MinecraftBlockStateArgumentNode, MinecraftEntityArgumentNode, MinecraftFloatRangeArgumentNode, MinecraftIntRangeArgumentNode, MinecraftItemPredicateArgumentNode, MinecraftItemStackArgumentNode, MinecraftMessageArgumentNode, MinecraftScoreHolderArgumentNode, MinecraftUuidArgumentNode, SpyglassmcUnknownArgumentNode, VectorBaseNode } from '../node'
+import { BlockStatesNode, CoordinateSystem, EntitySelectorArgumentsNode, EntitySelectorAtVariables, EntitySelectorNode, MinecraftTimeArgumentNode } from '../node'
 import type { ArgumentTreeNode } from '../tree/type'
 import { sep } from './common'
 
@@ -42,7 +44,7 @@ export function argument(name: string, treeNode: ArgumentTreeNode): core.Parser<
 			...res,
 			type: `mcfunction:argument/${treeNode.parser}`,
 			name,
-			hover: `\`${argumentTreeNodeToString(name, treeNode)}\``,
+			hover: `${argumentTreeNodeToString(name, treeNode)}${res.hover ? `\n\n------\n\n${res.hover}` : ''}`,
 		} as ArgumentNode)
 	)
 
@@ -60,16 +62,12 @@ export function argument(name: string, treeNode: ArgumentTreeNode): core.Parser<
 		case 'brigadier:string':
 			switch (treeNode.properties.type) {
 				case 'word':
-					return wrap(core.string({
-						unquotable: core.BrigadierUnquotablePattern,
-					}))
+					return wrap(unquotedString)
 				case 'phrase':
 					return wrap(core.brigadierString)
 				case 'greedy':
 				default:
-					return wrap(core.string({
-						unquotable: /^[^\r\n]+$/,
-					}))
+					return wrap(greedyString)
 			}
 		case 'minecraft:angle':
 			return wrap(core.validate(
@@ -79,6 +77,10 @@ export function argument(name: string, treeNode: ArgumentTreeNode): core.Parser<
 			))
 		case 'minecraft:block_pos':
 			return wrap(vector(3, true))
+		case 'minecraft:block_predicate':
+			return wrap(blockPredicate)
+		case 'minecraft:block_state':
+			return wrap(blockState)
 		case 'minecraft:color':
 			return wrap(core.map(
 				core.literal(
@@ -95,11 +97,13 @@ export function argument(name: string, treeNode: ArgumentTreeNode): core.Parser<
 		case 'minecraft:column_pos':
 			return wrap(vector(2, true))
 		case 'minecraft:component':
-			return wrap(core.MetaRegistry.instance.getParser('json:entry'))
+			return wrap(json.parser.entry)
 		case 'minecraft:dimension':
 			return wrap(core.resourceLocation({
 				category: 'dimension',
 			}))
+		case 'minecraft:entity':
+			return wrap(entity(treeNode.properties.amount, treeNode.properties.type))
 		case 'minecraft:entity_anchor':
 			return wrap(core.literal('feet', 'eyes'))
 		case 'minecraft:entity_summon':
@@ -113,12 +117,16 @@ export function argument(name: string, treeNode: ArgumentTreeNode): core.Parser<
 				category: 'function',
 				allowTag: true,
 			}))
+		case 'minecraft:game_profile':
+			return wrap(entity('multiple', 'players'))
 		case 'minecraft:int_range':
 			return wrap(range('integer'))
 		case 'minecraft:item_enchantment':
 			return wrap(core.resourceLocation({
 				category: 'enchantment',
 			}))
+		case 'minecraft:item_predicate':
+			return wrap(itemPredicate)
 		case 'minecraft:item_slot':
 			return wrap(core.literal(
 				...[...Array(54).keys()].map(n => `container.${n}`),
@@ -131,14 +139,18 @@ export function argument(name: string, treeNode: ArgumentTreeNode): core.Parser<
 				'horse.armor', 'horse.chest', 'horse.saddle',
 				'weapon', 'weapon.mainhand', 'weapon.offhand',
 			))
+		case 'minecraft:item_stack':
+			return wrap(itemStack)
+		case 'minecraft:message':
+			return wrap(message)
 		case 'minecraft:mob_effect':
 			return wrap(core.resourceLocation({
 				category: 'mob_effect',
 			}))
 		case 'minecraft:nbt_compound_tag':
-			return wrap(core.MetaRegistry.instance.getParser('nbt:compound'))
+			return wrap(nbt.parser.compound)
 		case 'minecraft:nbt_tag':
-			return wrap(core.MetaRegistry.instance.getParser('nbt:entry'))
+			return wrap(nbt.parser.entry)
 		case 'minecraft:objective':
 			return wrap(core.symbol({
 				category: 'objective',
@@ -155,6 +167,8 @@ export function argument(name: string, treeNode: ArgumentTreeNode): core.Parser<
 			}))
 		case 'minecraft:rotation':
 			return wrap(vector(2, undefined, true))
+		case 'minecraft:score_holder':
+			return wrap(scoreHolder(treeNode.properties.amount))
 		case 'minecraft:scoreboard_slot':
 			// `BeLOWnaME` and `sidebar.team.R--.+++e----__d` are also legal slots.
 			// But I do not want to spend time supporting them.
@@ -182,17 +196,9 @@ export function argument(name: string, treeNode: ArgumentTreeNode): core.Parser<
 			return wrap(vector(3))
 		case 'spyglassmc:symbol':
 			return wrap(core.symbol(treeNode.properties))
-		case 'minecraft:block_predicate':
-		case 'minecraft:block_state':
-		case 'minecraft:entity':
-		case 'minecraft:game_profile':
-		case 'minecraft:item_predicate':
-		case 'minecraft:item_stack':
-		case 'minecraft:message':
 		case 'minecraft:nbt_path':
 		case 'minecraft:objective_criteria':
 		case 'minecraft:particle':
-		case 'minecraft:score_holder':
 		default:
 			// Unknown parser. Accept everything from here and add a hint.
 			return wrap((src, ctx): SpyglassmcUnknownArgumentNode => {
@@ -213,6 +219,51 @@ export function argument(name: string, treeNode: ArgumentTreeNode): core.Parser<
 			})
 	}
 }
+
+function block(isPredicate: false): core.InfallibleParser<MinecraftBlockStateArgumentNode>
+function block(isPredicate: true): core.InfallibleParser<MinecraftBlockPredicateArgumentNode>
+function block(isPredicate: boolean): core.InfallibleParser<MinecraftBlockPredicateArgumentNode | MinecraftBlockStateArgumentNode> {
+	return core.map<core.SequenceUtil<core.ResourceLocationNode | BlockStatesNode | nbt.NbtCompoundNode>, MinecraftBlockPredicateArgumentNode | MinecraftBlockStateArgumentNode>(
+		core.sequence([
+			core.stopBefore(core.resourceLocation({ category: 'block', allowTag: isPredicate }), '[', '{'),
+			core.optional(core.map<core.TableNode<core.StringNode, core.StringNode>, BlockStatesNode>(
+				core.failOnEmpty(core.table<core.StringNode, core.StringNode>({
+					start: '[',
+					pair: {
+						key: core.string({
+							...core.BrigadierStringOptions,
+							colorTokenType: 'property',
+						}),
+						sep: '=',
+						value: core.brigadierString,
+						end: ',',
+						trailingEnd: true,
+					},
+					end: ']',
+				})),
+				res => ({
+					...res,
+					type: 'mcfunction:block/states',
+				})
+			)),
+			core.optional(core.failOnEmpty(nbt.parser.compound)),
+		]),
+		res => {
+			const ans: MinecraftBlockPredicateArgumentNode | MinecraftBlockStateArgumentNode = {
+				type: isPredicate ? 'mcfunction:argument/minecraft:block_predicate' : 'mcfunction:argument/minecraft:block_state',
+				range: res.range,
+				children: res.children,
+				name: '',
+				id: res.children.find(core.ResourceLocationNode.is)!,
+				states: res.children.find(BlockStatesNode.is),
+				nbt: res.children.find(nbt.NbtCompoundNode.is),
+			}
+			return ans
+		}
+	)
+}
+const blockState: core.InfallibleParser<MinecraftBlockStateArgumentNode> = block(false)
+const blockPredicate: core.InfallibleParser<MinecraftBlockPredicateArgumentNode> = block(true)
 
 function double(min = DoubleMin, max = DoubleMax): core.InfallibleParser<core.FloatNode> {
 	return core.float({
@@ -272,34 +323,117 @@ function coordinate(integerOnly = false): core.InfallibleParser<CoordinateNode> 
 	}
 }
 
-function entity(): core.InfallibleParser<MinecraftEntityArgumentNode> {
-	throw ''
+function entity(amount: 'multiple' | 'single', type: 'entities' | 'players'): core.InfallibleParser<MinecraftEntityArgumentNode> {
+	const MaxLength = 16
+	return core.map<core.StringNode | EntitySelectorNode | MinecraftUuidArgumentNode, MinecraftEntityArgumentNode>(
+		core.any([
+			core.map<core.StringNode>(
+				core.brigadierString,
+				(res, _src, ctx) => {
+					if (res.value.length > MaxLength) {
+						ctx.err.report(localize('mcfunction.parser.entity-selector.player-name.too-long', MaxLength), res)
+					}
+					return res
+				}
+			),
+			selector(),
+			uuid,
+		]),
+		(res, _src, ctx) => {
+			const ans: MinecraftEntityArgumentNode = {
+				type: 'mcfunction:argument/minecraft:entity',
+				range: res.range,
+				children: [res],
+				name: '',
+			}
+
+			if (core.StringNode.is(res)) {
+				ans.playerName = res
+			} else if (EntitySelectorNode.is(res)) {
+				ans.selector = res
+			} else {
+				ans.uuid = res
+			}
+
+			if (amount === 'single' && ans.selector && !ans.selector.single) {
+				ctx.err.report(localize('mcfunction.parser.entity-selector.multiple-disallowed'), ans)
+			}
+			if (type === 'players' && (ans.uuid || ans.selector && !ans.selector.playersOnly)) {
+				ctx.err.report(localize('mcfunction.parser.entity-selector.entities-disallowed'), ans)
+			}
+
+			return ans
+		}
+	)
 }
 
-// function item(allowTag: boolean): core.InfallibleParser<MinecraftItemStackArgumentNode> {
+const greedyString: core.InfallibleParser<core.StringNode> = core.string({
+	unquotable: /^[^\r\n]+$/,
+})
 
-// }
-
-function range(type: 'float'): core.Parser<MinecraftFloatRangeArgumentNode>
-function range(type: 'integer'): core.Parser<MinecraftIntRangeArgumentNode>
-function range(type: 'float' | 'integer'): core.Parser<MinecraftFloatRangeArgumentNode | MinecraftIntRangeArgumentNode> {
-	const number: core.Parser<core.FloatNode | core.IntegerNode> = type === 'float' ? float() : integer()
-	const min = core.failOnEmpty(core.stopBefore(number, '..'))
-	const sep = core.failOnEmpty(core.literal({ pool: ['..'], colorTokenType: 'keyword' }))
-	const max = core.failOnEmpty(number)
-	return core.map(
-		core.any<core.SequenceUtil<core.FloatNode | core.IntegerNode | core.LiteralNode>>([
-			/* exactly */ core.sequence([min]),
-			/* atLeast */ core.sequence([min, sep]),
-			/* atMost  */ core.sequence([sep, max]),
-			/* between */ core.sequence([min, sep, max]),
+function item(isPredicate: false): core.InfallibleParser<MinecraftItemStackArgumentNode>
+function item(isPredicate: true): core.InfallibleParser<MinecraftItemPredicateArgumentNode>
+function item(isPredicate: boolean): core.InfallibleParser<MinecraftItemPredicateArgumentNode | MinecraftItemStackArgumentNode> {
+	return core.map<core.SequenceUtil<core.ResourceLocationNode | nbt.NbtCompoundNode>, MinecraftItemPredicateArgumentNode | MinecraftItemStackArgumentNode>(
+		core.sequence([
+			core.stopBefore(core.resourceLocation({ category: 'item', allowTag: isPredicate }), '{'),
+			core.optional(core.failOnEmpty(nbt.parser.compound)),
 		]),
 		res => {
+			const ans: MinecraftItemPredicateArgumentNode | MinecraftItemStackArgumentNode = {
+				type: isPredicate ? 'mcfunction:argument/minecraft:item_predicate' : 'mcfunction:argument/minecraft:item_stack',
+				range: res.range,
+				children: res.children,
+				name: '',
+				id: res.children.find(core.ResourceLocationNode.is)!,
+				nbt: res.children.find(nbt.NbtCompoundNode.is),
+			}
+			return ans
+		}
+	)
+}
+const itemStack: core.InfallibleParser<MinecraftItemStackArgumentNode> = item(false)
+const itemPredicate: core.InfallibleParser<MinecraftItemPredicateArgumentNode> = item(true)
+
+const message: core.InfallibleParser<MinecraftMessageArgumentNode> = (src, ctx) => {
+	const ans: MinecraftMessageArgumentNode = {
+		type: 'mcfunction:argument/minecraft:message',
+		range: core.Range.create(src),
+		name: '',
+		children: [],
+	}
+
+	while (src.canReadInLine()) {
+		if (EntitySelectorAtVariables.includes(src.peek(2))) {
+			ans.children.push(selector()(src, ctx) as EntitySelectorNode)
+		} else {
+			ans.children.push(core.stopBefore(greedyString, ...EntitySelectorAtVariables)(src, ctx))
+		}
+	}
+
+	return ans
+}
+
+function range(type: 'float', min?: number, max?: number, cycleable?: boolean): core.Parser<MinecraftFloatRangeArgumentNode>
+function range(type: 'integer', min?: number, max?: number, cycleable?: boolean): core.Parser<MinecraftIntRangeArgumentNode>
+function range(type: 'float' | 'integer', min?: number, max?: number, cycleable?: boolean): core.Parser<MinecraftFloatRangeArgumentNode | MinecraftIntRangeArgumentNode> {
+	const number: core.Parser<core.FloatNode | core.IntegerNode> = type === 'float' ? float(min, max) : integer(min, max)
+	const low = core.failOnEmpty(core.stopBefore(number, '..'))
+	const sep = core.failOnEmpty(core.literal({ pool: ['..'], colorTokenType: 'keyword' }))
+	const high = core.failOnEmpty(number)
+	return core.map<core.SequenceUtil<core.FloatNode | core.IntegerNode | core.LiteralNode>, MinecraftFloatRangeArgumentNode | MinecraftIntRangeArgumentNode>(
+		core.any<core.SequenceUtil<core.FloatNode | core.IntegerNode | core.LiteralNode>>([
+			/* exactly */ core.sequence([low]),
+			/* atLeast */ core.sequence([low, sep]),
+			/* atMost  */ core.sequence([sep, high]),
+			/* between */ core.sequence([low, sep, high]),
+		]),
+		(res, _src, ctx) => {
 			const valueNodes = type === 'float'
 				? res.children.filter(core.FloatNode.is)
 				: res.children.filter(core.IntegerNode.is)
 			const sepNode = res.children.find(core.LiteralNode.is)
-			return {
+			const ans: MinecraftFloatRangeArgumentNode | MinecraftIntRangeArgumentNode = {
 				type: type === 'float' ? 'mcfunction:argument/minecraft:float_range' : 'mcfunction:argument/minecraft:int_range',
 				range: res.range,
 				children: res.children as any,
@@ -312,98 +446,419 @@ function range(type: 'float' | 'integer'): core.Parser<MinecraftFloatRangeArgume
 							: [null, valueNodes[0].value]
 					: [valueNodes[0].value, valueNodes[0].value],
 			}
+			if (!cycleable && ans.value[0] !== null && ans.value[1] !== null && ans.value[0] > ans.value[1]) {
+				ctx.err.report(localize('mcfunction.parser.range.min>max', ans.value[0], ans.value[1]), res)
+			}
+			return ans
 		}
 	)
 }
 
-const selector: core.Parser<EntitySelectorNode> = core.map<core.SequenceUtil<core.LiteralNode | EntitySelectorArgumentsNode>, EntitySelectorNode>(
-	core.sequence([
-		core.failOnEmpty(core.literal({ pool: EntitySelectorVariables.map(v => `@${v}`), colorTokenType: 'keyword' })),
-		core.optional(core.map<core.TableNode<core.StringNode, core.AstNode>, EntitySelectorArgumentsNode>(
-			core.failOnEmpty(core.table({
-				start: '[',
-				pair: {
-					key: core.brigadierString,
-					sep: '=',
-					value: {
-						get: (table, key) => {
-							switch (key?.value) {
-								case 'advancements':
-									throw '// TODO'
-								case 'distance':
-									throw '// TODO'
-								case 'gamemode':
-									throw '// TODO'
-								case 'limit':
-									throw '// TODO'
-								case 'level':
-									throw '// TODO'
-								case 'name':
-									throw '// TODO'
-								case 'nbt':
-									throw '// TODO'
-								case 'predicate':
-									throw '// TODO'
-								case 'scores':
-									throw '// TODO'
-								case 'sort':
-									throw '// TODO'
-								case 'tag':
-									throw '// TODO'
-								case 'team':
-									throw '// TODO'
-								case 'type':
-									throw '// TODO'
-								case 'x':
-									throw '// TODO'
-								case 'y':
-									throw '// TODO'
-								case 'z':
-									throw '// TODO'
-								case 'dx':
-									throw '// TODO'
-								case 'dy':
-									throw '// TODO'
-								case 'dz':
-									throw '// TODO'
-								case 'x_rotation':
-									throw '// TODO'
-								case 'y_rotation':
-									throw '// TODO'
-								case undefined:
-									// The key is empty. Let's just fail the value as well.
-									return (): core.Result<never> => core.Failure
-								default:
-									// The key is unknown.
-									return (_src, ctx): core.Result<never> => {
-										ctx.err.report(localize('mcfunction.parser.entity-selector.arguments.unknown', localeQuote(key!.value)), key!)
-										return core.Failure
-									}
+/**
+ * Failure when not beginning with `@[parse]`
+ */
+function selector(): core.Parser<EntitySelectorNode> {
+	let chunkLimited: boolean | undefined
+	let currentEntity: boolean | undefined
+	let dimensionLimited: boolean | undefined
+	let playersOnly: boolean | undefined
+	let predicates: string[] | undefined
+	let single: boolean | undefined
+	let typeLimited: boolean | undefined
+	return core.map<core.SequenceUtil<core.LiteralNode | EntitySelectorArgumentsNode>, EntitySelectorNode>(
+		core.sequence([
+			core.failOnEmpty(core.literal({ pool: EntitySelectorAtVariables, colorTokenType: 'keyword' })),
+			{
+				get: res => {
+					const variable = core.LiteralNode.is(res.children?.[0]) ? res.children[0].value : undefined
+
+					currentEntity = variable ? variable === '@s' : undefined
+					playersOnly = variable ? variable === '@p' || variable === '@a' || variable === '@r' : undefined
+					predicates = variable === '@e' ? ['Entity::isAlive'] : undefined
+					single = variable ? variable === '@p' || variable === '@r' || variable === '@s' : undefined
+					typeLimited = playersOnly
+
+					function invertable<T extends core.AstNode>(parser: core.Parser<T>): core.Parser<EntitySelectorInvertableArgumentValueNode<T>> {
+						return core.map<core.SequenceUtil<core.LiteralNode | T>, EntitySelectorInvertableArgumentValueNode<T>>(
+							core.sequence<core.LiteralNode | T>([
+								core.optional(core.failOnEmpty(core.literal({ pool: ['!'], colorTokenType: 'keyword' }))),
+								src => { src.skipSpace(); return null },
+								parser,
+							]),
+							res => {
+								const ans: EntitySelectorInvertableArgumentValueNode<T> = {
+									type: 'mcfunction:entity_selector/arguments/value/invertable',
+									range: res.range,
+									children: res.children,
+									inverted: !!res.children.find(n => core.LiteralNode.is(n) && n.value === '!'),
+									value: res.children.find(n => !core.LiteralNode.is(n) || n.value !== '!') as T,
+								}
+								return ans
 							}
-						},
-					},
-					end: ',',
-					trailingEnd: true,
+						)
+					}
+
+					const keys = ['advancements', 'distance', 'gamemode', 'level', 'limit', 'name', 'nbt', 'predicate', 'scores', 'sort', 'tag', 'team', 'type', 'x', 'y', 'z', 'dx', 'dy', 'dz', 'x_rotation', 'y_rotation']
+
+					return core.optional(core.map<core.TableNode<core.StringNode, core.AstNode>, EntitySelectorArgumentsNode>(
+						core.failOnEmpty(core.table({
+							start: '[',
+							pair: {
+								key: core.string({
+									...core.BrigadierStringOptions,
+									value: {
+										parser: core.literal({ pool: keys, colorTokenType: 'property' }),
+										type: 'literal',
+									},
+								}),
+								sep: '=',
+								value: {
+									get: (table, key) => {
+										const hasKey = (key: string): boolean => !!table.children.find(p => p.key?.value === key)
+										const hasNonInvertedKey = (key: string): boolean => !!table.children.find(p => p.key?.value === key && !(p.value as EntitySelectorInvertableArgumentValueNode<core.AstNode>)?.inverted)
+										switch (key?.value) {
+											case 'advancements':
+												return core.map<core.TableNode<core.ResourceLocationNode, core.BooleanNode | EntitySelectorAdvancementsArgumentCriteriaNode>, EntitySelectorAdvancementsArgumentNode>(
+													core.table<core.ResourceLocationNode, core.BooleanNode | EntitySelectorAdvancementsArgumentCriteriaNode>({
+														start: '{',
+														pair: {
+															key: core.resourceLocation({ category: 'advancement' }),
+															sep: '=',
+															value: core.any<core.BooleanNode | EntitySelectorAdvancementsArgumentCriteriaNode>([
+																core.boolean,
+																core.map<core.TableNode<core.StringNode, core.BooleanNode>, EntitySelectorAdvancementsArgumentCriteriaNode>(
+																	core.table<core.StringNode, core.BooleanNode>({
+																		start: '{',
+																		pair: {
+																			key: unquotedString,
+																			sep: '=',
+																			value: core.boolean,
+																			end: ',',
+																			trailingEnd: true,
+																		},
+																		end: '}',
+																	}),
+																	res => {
+																		const ans: EntitySelectorAdvancementsArgumentCriteriaNode = {
+																			...res,
+																			type: 'mcfunction:entity_selector/arguments/advancements/criteria',
+																		}
+																		return ans
+																	}
+																),
+															]),
+															end: ',',
+															trailingEnd: true,
+														},
+														end: '}',
+													}),
+													(res, _, ctx) => {
+														if (hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														const ans: EntitySelectorAdvancementsArgumentNode = {
+															...res,
+															type: 'mcfunction:entity_selector/arguments/advancements',
+														}
+														return ans
+													}
+												)
+											case 'distance':
+												return core.map<MinecraftFloatRangeArgumentNode>(
+													range('float', 0),
+													(res, _, ctx) => {
+														dimensionLimited = true
+														// x, y, z, dx, dy, dz take precedence over distance, so we use ??= instead of = to ensure it won't override the result.
+														chunkLimited ??= !playersOnly && res.value[1] !== null
+														if (hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														return res
+													}
+												)
+											case 'gamemode':
+												return core.map<EntitySelectorInvertableArgumentValueNode<core.StringNode>>(
+													invertable(core.string({
+														unquotable: core.BrigadierUnquotablePattern,
+														value: {
+															type: 'literal',
+															parser: core.literal('adventure', 'creative', 'spectator', 'survival'),
+														},
+													})),
+													(res, _, ctx) => {
+														playersOnly = true
+														if (res.inverted ? hasNonInvertedKey(key.value) : hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														return res
+													}
+												)
+											case 'limit':
+												return core.map<core.IntegerNode>(
+													integer(0),
+													(res, _, ctx) => {
+														single = res.value <= 1
+														if (hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														if (currentEntity) {
+															ctx.err.report(localize('mcfunction.parser.entity-selector.arguments.not-applicable', localeQuote(key.value)), key)
+														}
+														return res
+													}
+												)
+											case 'level':
+												return core.map<MinecraftIntRangeArgumentNode>(
+													range('integer', 0),
+													(res, _, ctx) => {
+														playersOnly = true
+														if (hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														return res
+													}
+												)
+											case 'name':
+												return core.map<EntitySelectorInvertableArgumentValueNode<core.StringNode>>(
+													invertable(core.brigadierString),
+													(res, _, ctx) => {
+														if (res.inverted ? hasNonInvertedKey(key.value) : hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														return res
+													}
+												)
+											case 'nbt':
+												return invertable(core.MetaRegistry.instance.getParser('nbt:compound'))
+											case 'predicate':
+												return invertable(core.resourceLocation({ category: 'predicate' }))
+											case 'scores':
+												return core.map<core.TableNode<core.SymbolNode, MinecraftIntRangeArgumentNode>, EntitySelectorScoresArgumentNode>(
+													core.table<core.SymbolNode, MinecraftIntRangeArgumentNode>({
+														start: '{',
+														pair: {
+															key: core.symbol({ category: 'objective' }),
+															sep: '=',
+															value: range('integer'),
+															end: ',',
+															trailingEnd: true,
+														},
+														end: '}',
+													}),
+													(res, _, ctx) => {
+														if (hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														const ans: EntitySelectorScoresArgumentNode = {
+															...res,
+															type: 'mcfunction:entity_selector/arguments/scores',
+														}
+														return ans
+													}
+												)
+											case 'sort':
+												return core.map<core.StringNode>(
+													core.string({
+														unquotable: core.BrigadierUnquotablePattern,
+														value: {
+															type: 'literal',
+															parser: core.literal('arbitrary', 'furthest', 'nearest', 'random'),
+														},
+													}),
+													(res, _, ctx) => {
+														if (hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														if (currentEntity) {
+															ctx.err.report(localize('mcfunction.parser.entity-selector.arguments.not-@s', localeQuote(key.value)), key)
+														}
+														return res
+													}
+												)
+											case 'tag':
+												return invertable(core.symbol({ category: 'tag' }))
+											case 'team':
+												return core.map<EntitySelectorInvertableArgumentValueNode<core.SymbolNode>>(
+													invertable(core.symbol({ category: 'team' })),
+													(res, _, ctx) => {
+														if (res.inverted ? hasNonInvertedKey(key.value) : hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														return res
+													}
+												)
+											case 'type':
+												return core.map<EntitySelectorInvertableArgumentValueNode<core.ResourceLocationNode>>(
+													invertable(core.resourceLocation({ category: 'entity_type', allowTag: true })),
+													(res, _, ctx) => {
+														if (res.inverted ? hasNonInvertedKey(key.value) : hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														} else if (typeLimited) {
+															ctx.err.report(localize('mcfunction.parser.entity-selector.arguments.not-applicable', localeQuote(key.value)), key)
+														} else if (!res.inverted && core.ResourceLocationNode.toString(res.value, 'short') === 'player') {
+															playersOnly = true
+														}
+														typeLimited = true
+														return res
+													}
+												)
+											case 'x':
+											case 'y':
+											case 'z':
+												return core.map<core.FloatNode>(
+													double(),
+													(res, _, ctx) => {
+														dimensionLimited = true
+														if (hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														return res
+													}
+												)
+											case 'dx':
+											case 'dy':
+											case 'dz':
+												return core.map<core.FloatNode>(
+													double(),
+													(res, _, ctx) => {
+														dimensionLimited = true
+														chunkLimited = !playersOnly
+														if (hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														return res
+													}
+												)
+											case 'x_rotation':
+											case 'y_rotation':
+												return core.map<MinecraftFloatRangeArgumentNode>(
+													range('float', undefined, undefined, true),
+													(res, _, ctx) => {
+														if (hasKey(key.value)) {
+															ctx.err.report(localize('duplicate-key', localeQuote(key.value)), key)
+														}
+														return res
+													}
+												)
+											case undefined:
+												// The key is empty. Let's just fail the value as well.
+												return (): core.Result<never> => core.Failure
+											default:
+												// The key is unknown.
+												return (_src, ctx): core.Result<never> => {
+													ctx.err.report(localize('mcfunction.parser.entity-selector.arguments.unknown', localeQuote(key!.value)), key!)
+													return core.Failure
+												}
+										}
+									},
+								},
+								end: ',',
+								trailingEnd: true,
+							},
+							end: ']',
+						})),
+						res => {
+							const ans: EntitySelectorArgumentsNode = {
+								...res,
+								type: 'mcfunction:entity_selector/arguments',
+							}
+							return ans
+						}
+					))
 				},
-				end: ']',
-			})),
-			res => {
-				const ans: EntitySelectorArgumentsNode = {
-					...res,
-					type: 'mcfunction:entity_selector/arguments',
-				}
-				return ans
+			},
+		]),
+		res => {
+			const ans: EntitySelectorNode = {
+				...res,
+				type: 'mcfunction:entity_selector',
+				variable: res.children.find(core.LiteralNode.is)?.value.slice(1),
+				argument: res.children.find(EntitySelectorArgumentsNode.is),
+				chunkLimited,
+				currentEntity,
+				dimensionLimited,
+				playersOnly,
+				predicates,
+				single,
+				typeLimited,
 			}
-		)),
-	]),
-	res => {
-		const ans: EntitySelectorNode = {
-			...res,
-			type: 'mcfunction:entity_selector',
+			ans.hover = getEntitySelectorHover(ans)
+			return ans
 		}
-		return ans
+	)
+}
+
+// This is more like a proof-of-concept.
+// Might not make into the actual release.
+function getEntitySelectorHover(node: EntitySelectorNode) {
+	const grades = new Map<number, string>([
+		[0, '🤢'], // Bad
+		[1, '😅'], // Normal
+		[2, 'Good'], // Good
+		[3, 'Great'], // Great
+		[4, '😌👌'], // Excellent
+	])
+	let ans: string
+	if (node.currentEntity) {
+		ans = `**Performance**: ${grades.get(4)}  
+- \`currentEntity\`: \`${node.currentEntity}\``
+	} else {
+		const amountOfTrue = [node.chunkLimited, node.dimensionLimited, node.playersOnly, node.typeLimited].filter(v => v).length
+		ans = `**Performance**: ${grades.get(amountOfTrue)}  
+- \`chunkLimited\`: \`${!!node.chunkLimited}\`
+- \`dimensionLimited\`: \`${!!node.dimensionLimited}\`
+- \`playersOnly\`: \`${!!node.playersOnly}\`
+- \`typeLimited\`: \`${!!node.chunkLimited}\``
+	}
+	if (node.predicates?.length) {
+		ans += `
+
+------
+**Predicates**: 
+${node.predicates.map(p => `- \`${p}\``).join('\n')}`
+	}
+	return ans
+}
+
+const FakeNameMaxLength = 40
+export const scoreHolderFakeName: core.Parser<core.SymbolNode> = core.map<core.SymbolNode>(
+	core.symbol({ category: 'score_holder' }),
+	(res, _src, ctx) => {
+		if (res.value.length > FakeNameMaxLength) {
+			ctx.err.report(localize('mcfunction.parser.score_holder.fake-name.too-long', FakeNameMaxLength), res)
+		}
+		return res
 	}
 )
+
+function scoreHolder(amount: 'multiple' | 'single'): core.Parser<MinecraftScoreHolderArgumentNode> {
+	return core.map<core.SymbolNode | EntitySelectorNode, MinecraftScoreHolderArgumentNode>(
+		core.any([
+			scoreHolderFakeName,
+			selector(),
+		]),
+		(res, _src, ctx) => {
+			const ans: MinecraftScoreHolderArgumentNode = {
+				type: 'mcfunction:argument/minecraft:score_holder',
+				range: res.range,
+				children: [res],
+				name: '',
+			}
+
+			if (core.SymbolNode.is(res)) {
+				ans.fakeName = res
+			} else {
+				ans.selector = res
+			}
+
+			if (amount === 'single' && ans.selector && !ans.selector.single) {
+				ctx.err.report(localize('mcfunction.parser.entity-selector.multiple-disallowed'), ans)
+			}
+
+			return ans
+		}
+	)
+}
 
 const time: core.InfallibleParser<MinecraftTimeArgumentNode> = core.map(
 	core.sequence([float(0, undefined), core.optional(core.failOnEmpty(core.literal(...MinecraftTimeArgumentNode.Units)))]),
@@ -421,6 +876,12 @@ const time: core.InfallibleParser<MinecraftTimeArgumentNode> = core.map(
 		return ans
 	}
 )
+
+const unquotedString: core.InfallibleParser<core.StringNode> = core.string({
+	unquotable: core.BrigadierUnquotablePattern,
+})
+
+const UuidPattern = /^[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+$/i
 
 const uuid: core.InfallibleParser<MinecraftUuidArgumentNode> = (src, ctx): MinecraftUuidArgumentNode => {
 	const ans: MinecraftUuidArgumentNode = {
@@ -440,7 +901,7 @@ const uuid: core.InfallibleParser<MinecraftUuidArgumentNode> = (src, ctx): Minec
 	 * http://hg.openjdk.java.net/jdk8/jdk8/jdk/file/default/src/share/classes/java/util/UUID.java
 	 */
 	let isLegal = false
-	if (raw.match(/^[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+$/i)) {
+	if (raw.match(UuidPattern)) {
 		try {
 			const parts = raw.split('-').map(p => BigInt(`0x${p}`))
 			if (parts.every(p => p <= LongMax)) {

@@ -78,7 +78,7 @@ export function integer(options: Options): Parser<IntegerNode> {
 			ctx.err.report(localize('expected', localize('integer')), ans)
 		} else if (!options.pattern.test(raw) || errorOccurred) {
 			ctx.err.report(localize('parser.integer.illegal', options.pattern), ans)
-		} else if ((options.min && ans.value < options.min) || (options.max && ans.value > options.max)) {
+		} else if ((options.min !== undefined && ans.value < options.min) || (options.max !== undefined && ans.value > options.max)) {
 			const onOutOfRange = options.onOutOfRange ?? fallbackOnOutOfRange
 			onOutOfRange(ans, src, ctx, options)
 		}

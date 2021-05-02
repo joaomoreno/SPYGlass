@@ -44,8 +44,8 @@ export function attempt<N extends Returnable = AstNode>(parser: Parser<N>, src: 
 	}
 }
 
-type SP<CN extends AstNode> = Parser<CN | SequenceUtil<CN> | null>
-type SIP<CN extends AstNode> = InfallibleParser<CN | SequenceUtil<CN> | null>
+type SP<CN extends AstNode> = Parser<CN | SequenceUtil<CN> | null> | { get: (result: SequenceUtil<CN>) => Parser<CN | SequenceUtil<CN> | null> }
+type SIP<CN extends AstNode> = InfallibleParser<CN | SequenceUtil<CN> | null> | { get: (result: SequenceUtil<CN>) => InfallibleParser<CN | SequenceUtil<CN> | null> }
 /**
  * @template CN Child node.
  * 
@@ -90,7 +90,7 @@ export function sequence<CN extends AstNode>(parsers: SP<CN>[], parseGap?: Infal
 				ans.children.push(...parseGap(src, ctx))
 			}
 
-			const result = parser(src, ctx)
+			const result = (typeof parser === 'function' ? parser : parser.get(ans))(src, ctx)
 			if (result === Failure) {
 				return Failure
 			} else if (result === null) {
@@ -253,9 +253,9 @@ export function recover<N extends Returnable>(parser: Parser<N>, defaultValue: (
  * 
  * `Failure` when the `parser` returns a `Failure`.
  */
-export function map<NA extends Returnable, NB extends Returnable>(parser: InfallibleParser<NA>, fn: (res: NA, src: Source, ctx: ParserContext) => NB): InfallibleParser<NB>
-export function map<NA extends Returnable, NB extends Returnable>(parser: Parser<NA>, fn: (res: NA, src: Source, ctx: ParserContext) => NB): Parser<NB>
-export function map<NA extends Returnable, NB extends Returnable>(parser: Parser<NA>, fn: (res: NA, src: Source, ctx: ParserContext) => NB): Parser<NB> {
+export function map<NA extends Returnable, NB extends Returnable = NA>(parser: InfallibleParser<NA>, fn: (res: NA, src: Source, ctx: ParserContext) => NB): InfallibleParser<NB>
+export function map<NA extends Returnable, NB extends Returnable = NA>(parser: Parser<NA>, fn: (res: NA, src: Source, ctx: ParserContext) => NB): Parser<NB>
+export function map<NA extends Returnable, NB extends Returnable = NA>(parser: Parser<NA>, fn: (res: NA, src: Source, ctx: ParserContext) => NB): Parser<NB> {
 	return (src: Source, ctx: ParserContext): Result<NB> => {
 		const result = parser(src, ctx)
 		if (result === Failure) {
@@ -299,7 +299,7 @@ export function stopBefore<N extends Returnable>(parser: Parser<N>, ...teminator
 			const index = tmpSrc.string.indexOf(c, tmpSrc.cursor)
 			return Math.min(p, index === -1 ? Infinity : index)
 		}, Infinity))
-		
+
 		const ans = parser(tmpSrc, ctx)
 		src.cursor = tmpSrc.cursor
 		return ans

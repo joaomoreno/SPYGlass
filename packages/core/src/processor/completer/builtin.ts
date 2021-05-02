@@ -101,7 +101,7 @@ export const string: Completer<StringBaseNode> = (node, ctx) => {
 
 export const symbol: Completer<SymbolBaseNode> = (node, ctx) => {
 	return Object
-		.keys(ctx.symbols.getVisibleSymbols(node.options.category))
+		.keys(ctx.symbols.query(ctx.doc, node.options.category, ...node.options.parentPath ?? []).visibleMembers)
 		.map(v => CompletionItem.create(v, node, undefined, { kind: CompletionKind.Variable }))
 }
 
